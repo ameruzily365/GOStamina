@@ -121,12 +121,11 @@ public final class StaminaListener implements Listener {
 
     private void enforceNoExhaustedSprint(Player player) {
         if (!plugin.settings().action("sprint").enabled()) return;
-        if (!player.isSprinting()) return;
         if (plugin.staminaManager().hasStamina(player)) {
-            setActive("sprint", player, true);
+            if (player.isSprinting()) setActive("sprint", player, true);
             return;
         }
-        player.setSprinting(false);
+        if (player.isSprinting()) player.setSprinting(false);
         setActive("sprint", player, false);
     }
 
@@ -157,6 +156,7 @@ public final class StaminaListener implements Listener {
         }
         if (e.isSprinting() && !plugin.staminaManager().hasStamina(e.getPlayer())) {
             e.setCancelled(true);
+            enforceNoExhaustedSprint(e.getPlayer());
             Bukkit.getScheduler().runTask(plugin, () -> enforceNoExhaustedSprint(e.getPlayer()));
             return;
         }
@@ -167,10 +167,11 @@ public final class StaminaListener implements Listener {
     @EventHandler public void onAbort(BlockDamageAbortEvent e) { setActive("mining", e.getPlayer(), false); }
     @EventHandler(ignoreCancelled = true) public void onBreak(BlockBreakEvent e) { setActive("mining", e.getPlayer(), false); if (!consumeInstant(e.getPlayer(), "break-block")) e.setCancelled(true); }
     @EventHandler(ignoreCancelled = true) public void onAttack(EntityDamageByEntityEvent e) { if (e.getDamager() instanceof Player p && !consumeInstant(p, "attack")) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onJumpMove(PlayerMoveEvent e) {
+    @EventHandler(ignoreCancelled = true) public void onMove(PlayerMoveEvent e) {
+        Player player = e.getPlayer();
+        enforceNoExhaustedSprint(player);
         if (!plugin.settings().action("jump").enabled()) return;
         if (e.getTo() == null || e.getTo().getY() <= e.getFrom().getY()) return;
-        Player player = e.getPlayer();
         if (player.isFlying() || player.isGliding() || player.isSwimming()) return;
         if (player.getVelocity().getY() < 0.35D) return;
         long now = System.currentTimeMillis();
