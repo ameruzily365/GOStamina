@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class StaminaListener implements Listener {
     private final GOStaminaPlugin plugin;
     private final Map<String, Set<UUID>> active = new ConcurrentHashMap<>();
+    private final Map<String, Map<UUID, Double>> continuousProgress = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastJumpConsume = new ConcurrentHashMap<>();
 
     public StaminaListener(GOStaminaPlugin plugin) { this.plugin = plugin; }
@@ -30,7 +31,7 @@ public final class StaminaListener implements Listener {
         for (String key : List.of("sprint", "swim", "mining", "bow", "crossbow", "shield")) {
             ActionSettings action = plugin.settings().action(key);
             if (!action.enabled()) continue;
-            Bukkit.getScheduler().runTaskTimer(plugin, () -> tickContinuous(key), 20L, action.intervalSeconds() * 20L);
+            Bukkit.getScheduler().runTaskTimer(plugin, () -> tickContinuous(key), 20L, 1L);
         }
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -41,11 +42,33 @@ public final class StaminaListener implements Listener {
 
     private void tickContinuous(String key) {
         ActionSettings action = plugin.settings().action(key);
-        if (!action.enabled()) return;
+        if (!action.enabled() || action.amount() <= 0) return;
+        double staminaPerTick = action.amount() / (Math.max(1, action.intervalSeconds()) * 20.0D);
+        Map<UUID, Double> progress = continuousProgress.computeIfAbsent(key, ignored -> new ConcurrentHashMap<>());
         for (UUID uuid : new HashSet<>(active.getOrDefault(key, Set.of()))) {
             Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) { active.getOrDefault(key, Set.of()).remove(uuid); continue; }
-            if (!plugin.staminaManager().consume(player, action.amount())) stopIfEmpty(key, player);
+            if (player == null || !player.isOnline()) {
+                active.getOrDefault(key, Set.of()).remove(uuid);
+                progress.remove(uuid);
+                continue;
+            }
+            if (!plugin.staminaManager().hasStamina(player)) {
+                stopIfEmpty(key, player);
+                progress.remove(uuid);
+                continue;
+            }
+            plugin.staminaManager().lockRegeneration(player, plugin.getConfig().getInt("regeneration.delay-seconds", 5));
+            double updatedProgress = progress.getOrDefault(uuid, 0.0D) + staminaPerTick;
+            int wholeAmount = (int) Math.floor(updatedProgress);
+            if (wholeAmount <= 0) {
+                progress.put(uuid, updatedProgress);
+                continue;
+            }
+            progress.put(uuid, updatedProgress - wholeAmount);
+            if (!plugin.staminaManager().consume(player, wholeAmount) || !plugin.staminaManager().hasStamina(player)) {
+                stopIfEmpty(key, player);
+                progress.remove(uuid);
+            }
         }
     }
 
@@ -53,7 +76,10 @@ public final class StaminaListener implements Listener {
         if (key.equals("sprint")) player.setSprinting(false);
         if (key.equals("swim")) player.setSwimming(false);
         if (key.equals("shield")) player.setCooldown(Material.SHIELD, 20);
+        if (key.equals("bow") || key.equals("crossbow")) stopUsingItem(player);
         setActive(key, player, false);
+        Map<UUID, Double> progress = continuousProgress.get(key);
+        if (progress != null) progress.remove(player.getUniqueId());
     }
 
     private boolean consumeInstant(Player player, String key) {
@@ -88,6 +114,10 @@ public final class StaminaListener implements Listener {
         return null;
     }
 
+    private void stopUsingItem(Player player) {
+        invokeNoArgs(player, "clearActiveItem");
+    }
+
     private Object invokeNoArgs(Player player, String methodName) {
         try {
             return player.getClass().getMethod(methodName).invoke(player);
@@ -98,11 +128,16 @@ public final class StaminaListener implements Listener {
 
     private void setActive(String key, Player player, boolean value) {
         active.computeIfAbsent(key, ignored -> ConcurrentHashMap.newKeySet());
-        if (value) active.get(key).add(player.getUniqueId()); else active.get(key).remove(player.getUniqueId());
+        if (value) active.get(key).add(player.getUniqueId());
+        else {
+            active.get(key).remove(player.getUniqueId());
+            Map<UUID, Double> progress = continuousProgress.get(key);
+            if (progress != null) progress.remove(player.getUniqueId());
+        }
     }
 
     @EventHandler public void onJoin(PlayerJoinEvent event) { plugin.staminaManager().load(event.getPlayer()); }
-    @EventHandler public void onQuit(PlayerQuitEvent event) { active.values().forEach(set -> set.remove(event.getPlayer().getUniqueId())); lastJumpConsume.remove(event.getPlayer().getUniqueId()); plugin.staminaManager().unload(event.getPlayer()); }
+    @EventHandler public void onQuit(PlayerQuitEvent event) { active.values().forEach(set -> set.remove(event.getPlayer().getUniqueId())); continuousProgress.values().forEach(map -> map.remove(event.getPlayer().getUniqueId())); lastJumpConsume.remove(event.getPlayer().getUniqueId()); plugin.staminaManager().unload(event.getPlayer()); }
     @EventHandler(ignoreCancelled = true) public void onSprint(PlayerToggleSprintEvent e) { if (e.isSprinting() && !plugin.staminaManager().hasStamina(e.getPlayer()) && plugin.settings().action("sprint").enabled()) e.setCancelled(true); else setActive("sprint", e.getPlayer(), e.isSprinting()); }
     @EventHandler(ignoreCancelled = true) public void onSwim(EntityToggleSwimEvent e) { if (e.getEntity() instanceof Player p) { if (e.isSwimming() && !plugin.staminaManager().hasStamina(p) && plugin.settings().action("swim").enabled()) e.setCancelled(true); else setActive("swim", p, e.isSwimming()); } }
     @EventHandler(ignoreCancelled = true) public void onBlockDamage(BlockDamageEvent e) { if (plugin.settings().action("mining").enabled() && !plugin.staminaManager().hasStamina(e.getPlayer())) e.setCancelled(true); else setActive("mining", e.getPlayer(), true); }
@@ -125,7 +160,7 @@ public final class StaminaListener implements Listener {
         }
     }
     @EventHandler(ignoreCancelled = true) public void onInteract(PlayerInteractEvent e) { if (e.getHand() != EquipmentSlot.HAND) return; ItemStack item = e.getItem(); if (item == null) return; Player p = e.getPlayer(); if (item.getType() == Material.BOW) { if (!plugin.staminaManager().hasStamina(p) && plugin.settings().action("bow").enabled()) e.setCancelled(true); else setActive("bow", p, true); } if (item.getType() == Material.CROSSBOW) { if (!plugin.staminaManager().hasStamina(p) && plugin.settings().action("crossbow").enabled()) e.setCancelled(true); else setActive("crossbow", p, true); } if (item.getType() == Material.SHIELD && !plugin.staminaManager().hasStamina(p) && plugin.settings().action("shield").enabled()) e.setCancelled(true); }
-    @EventHandler public void onShoot(EntityShootBowEvent e) { if (e.getEntity() instanceof Player p) { setActive("bow", p, false); setActive("crossbow", p, false); } }
+    @EventHandler(ignoreCancelled = true) public void onShoot(EntityShootBowEvent e) { if (e.getEntity() instanceof Player p) { if (!plugin.staminaManager().hasStamina(p)) e.setCancelled(true); setActive("bow", p, false); setActive("crossbow", p, false); } }
     @EventHandler public void onItemHeld(PlayerItemHeldEvent e) { setActive("bow", e.getPlayer(), false); setActive("crossbow", e.getPlayer(), false); }
     @EventHandler public void onDrop(PlayerDropItemEvent e) { setActive("bow", e.getPlayer(), false); setActive("crossbow", e.getPlayer(), false); }
     @EventHandler(ignoreCancelled = true) public void onConsume(PlayerItemConsumeEvent e) { plugin.staminaManager().restore(e.getPlayer(), plugin.settings().foodRegen(itemKey(e.getItem()))); }
