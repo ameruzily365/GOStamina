@@ -1,0 +1,9 @@
+foods:
+  minecraft:bread:
+    regen: 15
+  minecraft:golden_apple:
+    regen: 50
+  craftengine:cheese:
+    regen: 30
+default:
+  regen: 10
