@@ -1,0 +1,13 @@
+defaults:
+  base-max-stamina: 20
+  bonus-max-stamina: 0
+  current-stamina: 20
+
+storage:
+  save-interval-seconds: 120
+
+regeneration:
+  enabled: true
+  delay-seconds: 5
+  interval-ticks: 20
+  amount-per-tick: 1

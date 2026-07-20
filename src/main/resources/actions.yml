@@ -1,0 +1,46 @@
+actions:
+  sprint:
+    enabled: true
+    type: continuous
+    amount: 1
+    interval-seconds: 1
+  swim:
+    enabled: true
+    type: continuous
+    amount: 1
+    interval-seconds: 1
+  mining:
+    enabled: true
+    type: continuous
+    amount: 1
+    interval-seconds: 1
+  break-block:
+    enabled: true
+    type: instant
+    amount: 1
+    interval-seconds: 0
+  attack:
+    enabled: true
+    type: instant
+    amount: 1
+    interval-seconds: 0
+  jump:
+    enabled: true
+    type: instant
+    amount: 1
+    interval-seconds: 0
+  bow:
+    enabled: true
+    type: continuous
+    amount: 1
+    interval-seconds: 1
+  crossbow:
+    enabled: true
+    type: continuous
+    amount: 1
+    interval-seconds: 1
+  shield:
+    enabled: true
+    type: continuous
+    amount: 1
+    interval-seconds: 1
