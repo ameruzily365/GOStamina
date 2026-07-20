@@ -88,6 +88,7 @@ public final class StaminaListener implements Listener {
     }
 
     private void updatePolledContinuousStates(Player player) {
+        enforceNoExhaustedSprint(player);
         setActive("shield", player, plugin.settings().action("shield").enabled() && player.isBlocking());
         setActive("swim", player, plugin.settings().action("swim").enabled() && player.isSwimming());
 
@@ -118,6 +119,17 @@ public final class StaminaListener implements Listener {
         invokeNoArgs(player, "clearActiveItem");
     }
 
+    private void enforceNoExhaustedSprint(Player player) {
+        if (!plugin.settings().action("sprint").enabled()) return;
+        if (!player.isSprinting()) return;
+        if (plugin.staminaManager().hasStamina(player)) {
+            setActive("sprint", player, true);
+            return;
+        }
+        player.setSprinting(false);
+        setActive("sprint", player, false);
+    }
+
     private Object invokeNoArgs(Player player, String methodName) {
         try {
             return player.getClass().getMethod(methodName).invoke(player);
@@ -138,7 +150,18 @@ public final class StaminaListener implements Listener {
 
     @EventHandler public void onJoin(PlayerJoinEvent event) { plugin.staminaManager().load(event.getPlayer()); }
     @EventHandler public void onQuit(PlayerQuitEvent event) { active.values().forEach(set -> set.remove(event.getPlayer().getUniqueId())); continuousProgress.values().forEach(map -> map.remove(event.getPlayer().getUniqueId())); lastJumpConsume.remove(event.getPlayer().getUniqueId()); plugin.staminaManager().unload(event.getPlayer()); }
-    @EventHandler(ignoreCancelled = true) public void onSprint(PlayerToggleSprintEvent e) { if (e.isSprinting() && !plugin.staminaManager().hasStamina(e.getPlayer()) && plugin.settings().action("sprint").enabled()) e.setCancelled(true); else setActive("sprint", e.getPlayer(), e.isSprinting()); }
+    @EventHandler(ignoreCancelled = true) public void onSprint(PlayerToggleSprintEvent e) {
+        if (!plugin.settings().action("sprint").enabled()) {
+            setActive("sprint", e.getPlayer(), false);
+            return;
+        }
+        if (e.isSprinting() && !plugin.staminaManager().hasStamina(e.getPlayer())) {
+            e.setCancelled(true);
+            Bukkit.getScheduler().runTask(plugin, () -> enforceNoExhaustedSprint(e.getPlayer()));
+            return;
+        }
+        setActive("sprint", e.getPlayer(), e.isSprinting());
+    }
     @EventHandler(ignoreCancelled = true) public void onSwim(EntityToggleSwimEvent e) { if (e.getEntity() instanceof Player p) { if (e.isSwimming() && !plugin.staminaManager().hasStamina(p) && plugin.settings().action("swim").enabled()) e.setCancelled(true); else setActive("swim", p, e.isSwimming()); } }
     @EventHandler(ignoreCancelled = true) public void onBlockDamage(BlockDamageEvent e) { if (plugin.settings().action("mining").enabled() && !plugin.staminaManager().hasStamina(e.getPlayer())) e.setCancelled(true); else setActive("mining", e.getPlayer(), true); }
     @EventHandler public void onAbort(BlockDamageAbortEvent e) { setActive("mining", e.getPlayer(), false); }
