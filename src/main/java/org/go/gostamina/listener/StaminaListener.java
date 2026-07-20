@@ -1,6 +1,5 @@
 package org.go.gostamina.listener;
 
-import io.papermc.paper.event.player.PlayerJumpEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -23,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class StaminaListener implements Listener {
     private final GOStaminaPlugin plugin;
     private final Map<String, Set<UUID>> active = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastJumpConsume = new ConcurrentHashMap<>();
 
     public StaminaListener(GOStaminaPlugin plugin) { this.plugin = plugin; }
 
@@ -67,14 +67,28 @@ public final class StaminaListener implements Listener {
     }
 
     @EventHandler public void onJoin(PlayerJoinEvent event) { plugin.staminaManager().load(event.getPlayer()); }
-    @EventHandler public void onQuit(PlayerQuitEvent event) { active.values().forEach(set -> set.remove(event.getPlayer().getUniqueId())); plugin.staminaManager().unload(event.getPlayer()); }
+    @EventHandler public void onQuit(PlayerQuitEvent event) { active.values().forEach(set -> set.remove(event.getPlayer().getUniqueId())); lastJumpConsume.remove(event.getPlayer().getUniqueId()); plugin.staminaManager().unload(event.getPlayer()); }
     @EventHandler(ignoreCancelled = true) public void onSprint(PlayerToggleSprintEvent e) { if (e.isSprinting() && !plugin.staminaManager().hasStamina(e.getPlayer()) && plugin.settings().action("sprint").enabled()) e.setCancelled(true); else setActive("sprint", e.getPlayer(), e.isSprinting()); }
     @EventHandler(ignoreCancelled = true) public void onSwim(EntityToggleSwimEvent e) { if (e.getEntity() instanceof Player p) { if (e.isSwimming() && !plugin.staminaManager().hasStamina(p) && plugin.settings().action("swim").enabled()) e.setCancelled(true); else setActive("swim", p, e.isSwimming()); } }
     @EventHandler(ignoreCancelled = true) public void onBlockDamage(BlockDamageEvent e) { if (plugin.settings().action("mining").enabled() && !plugin.staminaManager().hasStamina(e.getPlayer())) e.setCancelled(true); else setActive("mining", e.getPlayer(), true); }
     @EventHandler public void onAbort(BlockDamageAbortEvent e) { setActive("mining", e.getPlayer(), false); }
     @EventHandler(ignoreCancelled = true) public void onBreak(BlockBreakEvent e) { setActive("mining", e.getPlayer(), false); if (!consumeInstant(e.getPlayer(), "break-block")) e.setCancelled(true); }
     @EventHandler(ignoreCancelled = true) public void onAttack(EntityDamageByEntityEvent e) { if (e.getDamager() instanceof Player p && !consumeInstant(p, "attack")) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onJump(PlayerJumpEvent e) { if (!consumeInstant(e.getPlayer(), "jump")) e.setCancelled(true); }
+    @EventHandler(ignoreCancelled = true) public void onJumpMove(PlayerMoveEvent e) {
+        if (!plugin.settings().action("jump").enabled()) return;
+        if (e.getTo() == null || e.getTo().getY() <= e.getFrom().getY()) return;
+        Player player = e.getPlayer();
+        if (player.isFlying() || player.isGliding() || player.isSwimming()) return;
+        if (player.getVelocity().getY() < 0.35D) return;
+        long now = System.currentTimeMillis();
+        long last = lastJumpConsume.getOrDefault(player.getUniqueId(), 0L);
+        if (now - last < 250L) return;
+        lastJumpConsume.put(player.getUniqueId(), now);
+        if (!consumeInstant(player, "jump")) {
+            e.setCancelled(true);
+            player.setVelocity(player.getVelocity().setY(0.0D));
+        }
+    }
     @EventHandler(ignoreCancelled = true) public void onInteract(PlayerInteractEvent e) { if (e.getHand() != EquipmentSlot.HAND) return; ItemStack item = e.getItem(); if (item == null) return; Player p = e.getPlayer(); if (item.getType() == Material.BOW) { if (!plugin.staminaManager().hasStamina(p) && plugin.settings().action("bow").enabled()) e.setCancelled(true); else setActive("bow", p, true); } if (item.getType() == Material.CROSSBOW) { if (!plugin.staminaManager().hasStamina(p) && plugin.settings().action("crossbow").enabled()) e.setCancelled(true); else setActive("crossbow", p, true); } if (item.getType() == Material.SHIELD && !plugin.staminaManager().hasStamina(p) && plugin.settings().action("shield").enabled()) e.setCancelled(true); }
     @EventHandler public void onShoot(EntityShootBowEvent e) { if (e.getEntity() instanceof Player p) { setActive("bow", p, false); setActive("crossbow", p, false); } }
     @EventHandler public void onItemHeld(PlayerItemHeldEvent e) { setActive("bow", e.getPlayer(), false); setActive("crossbow", e.getPlayer(), false); }
