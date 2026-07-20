@@ -1,0 +1,15 @@
+name: GOStamina
+version: ${project.version}
+main: org.go.gostamina.GOStaminaPlugin
+api-version: '1.21'
+folia-supported: false
+softdepend: [PlaceholderAPI]
+commands:
+  stamina:
+    description: GOStamina admin command
+    usage: /stamina <set|add|remove|max|delay>
+    permission: stamina.admin
+permissions:
+  stamina.admin:
+    description: Allows using /stamina admin commands
+    default: op
