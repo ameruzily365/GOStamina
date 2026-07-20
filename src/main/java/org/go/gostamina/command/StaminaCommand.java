@@ -19,6 +19,8 @@ public final class StaminaCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§aGOStamina reloaded.");
             return true;
         }
+        if (args.length >= 1 && args[0].equalsIgnoreCase("removecaffeine")) return removeCaffeine(sender, args);
+        if (args.length >= 1 && args[0].equalsIgnoreCase("caffeine")) return caffeine(sender, args);
         if (args.length < 3) return usage(sender);
         Player target = Bukkit.getPlayerExact(args[0].equalsIgnoreCase("max") ? args[2] : args[1]);
         if (target == null) { sender.sendMessage("§cPlayer not found or data not loaded."); return true; }
@@ -41,7 +43,29 @@ public final class StaminaCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean caffeine(CommandSender sender, String[] args) {
+        if (args.length != 4) return usage(sender);
+        Player target = Bukkit.getPlayerExact(args[1]);
+        if (target == null) { sender.sendMessage("§cPlayer not found."); return true; }
+        try {
+            int extraAmount = parse(args[2]);
+            int seconds = parse(args[3]);
+            plugin.staminaManager().applyCaffeine(target, extraAmount, seconds);
+            sender.sendMessage("§aApplied caffeine to " + target.getName() + ": +" + extraAmount + " for " + seconds + "s.");
+        } catch (NumberFormatException e) { sender.sendMessage("§cAmount and time must be integers."); }
+        return true;
+    }
+
+    private boolean removeCaffeine(CommandSender sender, String[] args) {
+        if (args.length != 2) return usage(sender);
+        Player target = Bukkit.getPlayerExact(args[1]);
+        if (target == null) { sender.sendMessage("§cPlayer not found."); return true; }
+        plugin.staminaManager().removeCaffeine(target);
+        sender.sendMessage("§aRemoved caffeine from " + target.getName() + ".");
+        return true;
+    }
+
     private int parse(String value) { return Math.max(0, Integer.parseInt(value)); }
-    private boolean usage(CommandSender sender) { sender.sendMessage("§e/stamina set|add|remove <player> <amount>\n/stamina max set|add|remove <player> <amount>\n/stamina delay <player> <seconds>\n/stamina reload"); return true; }
+    private boolean usage(CommandSender sender) { sender.sendMessage("§e/stamina set|add|remove <player> <amount>\n/stamina max set|add|remove <player> <amount>\n/stamina delay <player> <seconds>\n/stamina caffeine <player> <amount> <seconds>\n/stamina removecaffeine <player>\n/stamina reload"); return true; }
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) { return List.of(); }
 }
