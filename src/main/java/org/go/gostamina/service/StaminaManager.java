@@ -54,7 +54,7 @@ public final class StaminaManager {
     }
 
     public void restore(Player player, int amount) { StaminaData data = get(player); if (data != null && amount > 0) data.addCurrentStamina(amount); }
-    public boolean hasStamina(Player player) { StaminaData data = get(player); return data == null || data.currentStamina() > 0; }
+    public boolean hasStamina(Player player) { StaminaData data = get(player); return data != null && data.currentStamina() > 0; }
     public void lockRegeneration(Player player, int seconds) { regenLockedUntil.put(player.getUniqueId(), System.currentTimeMillis() + seconds * 1000L); }
     public boolean canRegenerate(Player player) { return System.currentTimeMillis() >= regenLockedUntil.getOrDefault(player.getUniqueId(), 0L); }
 
