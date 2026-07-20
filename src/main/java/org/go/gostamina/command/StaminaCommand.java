@@ -14,6 +14,11 @@ public final class StaminaCommand implements CommandExecutor, TabCompleter {
 
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("stamina.admin")) { sender.sendMessage("§cNo permission."); return true; }
+        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+            plugin.reloadPlugin();
+            sender.sendMessage("§aGOStamina reloaded.");
+            return true;
+        }
         if (args.length < 3) return usage(sender);
         Player target = Bukkit.getPlayerExact(args[0].equalsIgnoreCase("max") ? args[2] : args[1]);
         if (target == null) { sender.sendMessage("§cPlayer not found or data not loaded."); return true; }
@@ -37,6 +42,6 @@ public final class StaminaCommand implements CommandExecutor, TabCompleter {
     }
 
     private int parse(String value) { return Math.max(0, Integer.parseInt(value)); }
-    private boolean usage(CommandSender sender) { sender.sendMessage("§e/stamina set|add|remove <player> <amount>\n/stamina max set|add|remove <player> <amount>\n/stamina delay <player> <seconds>"); return true; }
+    private boolean usage(CommandSender sender) { sender.sendMessage("§e/stamina set|add|remove <player> <amount>\n/stamina max set|add|remove <player> <amount>\n/stamina delay <player> <seconds>\n/stamina reload"); return true; }
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) { return List.of(); }
 }

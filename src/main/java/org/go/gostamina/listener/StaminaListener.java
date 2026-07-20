@@ -34,7 +34,7 @@ public final class StaminaListener implements Listener {
         }
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
-                setActive("shield", player, player.isBlocking());
+                updatePolledContinuousStates(player);
             }
         }, 5L, 5L);
     }
@@ -59,6 +59,41 @@ public final class StaminaListener implements Listener {
     private boolean consumeInstant(Player player, String key) {
         ActionSettings action = plugin.settings().action(key);
         return !action.enabled() || plugin.staminaManager().consume(player, action.amount());
+    }
+
+    private void updatePolledContinuousStates(Player player) {
+        setActive("shield", player, plugin.settings().action("shield").enabled() && player.isBlocking());
+        setActive("swim", player, plugin.settings().action("swim").enabled() && player.isSwimming());
+
+        ItemStack activeItem = activeUseItem(player);
+        boolean handRaised = isHandRaised(player);
+        setActive("bow", player, plugin.settings().action("bow").enabled() && handRaised && activeItem != null && activeItem.getType() == Material.BOW);
+        setActive("crossbow", player, plugin.settings().action("crossbow").enabled() && handRaised && activeItem != null && activeItem.getType() == Material.CROSSBOW);
+    }
+
+    private boolean isHandRaised(Player player) {
+        Object value = invokeNoArgs(player, "isHandRaised");
+        return value instanceof Boolean raised && raised;
+    }
+
+    private ItemStack activeUseItem(Player player) {
+        Object activeItem = invokeNoArgs(player, "getActiveItem");
+        if (activeItem instanceof ItemStack item && item.getType() != Material.AIR) return item;
+        Object itemInUse = invokeNoArgs(player, "getItemInUse");
+        if (itemInUse instanceof ItemStack item && item.getType() != Material.AIR) return item;
+        ItemStack mainHand = player.getInventory().getItemInMainHand();
+        if (mainHand.getType() == Material.BOW || mainHand.getType() == Material.CROSSBOW) return mainHand;
+        ItemStack offHand = player.getInventory().getItemInOffHand();
+        if (offHand.getType() == Material.BOW || offHand.getType() == Material.CROSSBOW) return offHand;
+        return null;
+    }
+
+    private Object invokeNoArgs(Player player, String methodName) {
+        try {
+            return player.getClass().getMethod(methodName).invoke(player);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
     }
 
     private void setActive(String key, Player player, boolean value) {

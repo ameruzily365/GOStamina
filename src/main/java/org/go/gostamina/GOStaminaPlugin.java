@@ -15,6 +15,7 @@ public final class GOStaminaPlugin extends JavaPlugin {
     private Settings settings;
     private SQLiteStorage storage;
     private StaminaManager staminaManager;
+    private StaminaListener staminaListener;
 
     @Override public void onEnable() {
         settings = new Settings(this);
@@ -22,9 +23,9 @@ public final class GOStaminaPlugin extends JavaPlugin {
         storage = new SQLiteStorage(this);
         try { storage.open(); } catch (SQLException e) { getLogger().severe("Unable to open SQLite storage: " + e.getMessage()); getServer().getPluginManager().disablePlugin(this); return; }
         staminaManager = new StaminaManager(this);
-        StaminaListener listener = new StaminaListener(this);
-        getServer().getPluginManager().registerEvents(listener, this);
-        listener.startContinuousTasks();
+        staminaListener = new StaminaListener(this);
+        getServer().getPluginManager().registerEvents(staminaListener, this);
+        staminaListener.startContinuousTasks();
         staminaManager.startTasks();
         StaminaCommand command = new StaminaCommand(this);
         getCommand("stamina").setExecutor(command);
@@ -36,6 +37,13 @@ public final class GOStaminaPlugin extends JavaPlugin {
     @Override public void onDisable() {
         if (staminaManager != null) staminaManager.saveAll();
         if (storage != null) try { storage.close(); } catch (SQLException e) { getLogger().warning("Failed to close SQLite storage: " + e.getMessage()); }
+    }
+
+    public void reloadPlugin() {
+        settings.reload();
+        Bukkit.getScheduler().cancelTasks(this);
+        if (staminaListener != null) staminaListener.startContinuousTasks();
+        if (staminaManager != null) staminaManager.startTasks();
     }
 
     public Settings settings() { return settings; }
